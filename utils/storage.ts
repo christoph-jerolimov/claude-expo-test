@@ -1,4 +1,4 @@
-import { File, Paths } from 'expo-file-system';
+import { Platform } from 'react-native';
 
 export interface WeightEntry {
   date: string; // YYYY-MM-DD
@@ -16,8 +16,7 @@ export interface AppData {
   settings: AppSettings;
 }
 
-const dataFile = new File(Paths.document, 'weight-data.json');
-const exportFile = new File(Paths.cache, 'weight-data-export.json');
+const STORAGE_KEY = 'weight-data';
 
 const DEFAULT_DATA: AppData = {
   entries: [],
@@ -27,10 +26,32 @@ const DEFAULT_DATA: AppData = {
   },
 };
 
+// Lazy-load expo-file-system only on native to avoid web crash
+function getNativeFile(name: string) {
+  const { File, Paths } = require('expo-file-system') as typeof import('expo-file-system');
+  return new File(Paths.document, name);
+}
+
+function getNativeCacheFile(name: string) {
+  const { File, Paths } = require('expo-file-system') as typeof import('expo-file-system');
+  return new File(Paths.cache, name);
+}
+
 export async function loadData(): Promise<AppData> {
   try {
-    if (!dataFile.exists) return { ...DEFAULT_DATA, entries: [] };
-    const json = await dataFile.text();
+    if (Platform.OS === 'web') {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return { ...DEFAULT_DATA, entries: [] };
+      const data = JSON.parse(raw) as AppData;
+      if (!Array.isArray(data.entries) || !data.settings) {
+        return { ...DEFAULT_DATA, entries: [] };
+      }
+      return data;
+    }
+
+    const file = getNativeFile('weight-data.json');
+    if (!file.exists) return { ...DEFAULT_DATA, entries: [] };
+    const json = await file.text();
     const data = JSON.parse(json) as AppData;
     if (!Array.isArray(data.entries) || !data.settings) {
       return { ...DEFAULT_DATA, entries: [] };
@@ -42,7 +63,12 @@ export async function loadData(): Promise<AppData> {
 }
 
 export async function saveData(data: AppData): Promise<void> {
-  dataFile.write(JSON.stringify(data, null, 2));
+  const json = JSON.stringify(data, null, 2);
+  if (Platform.OS === 'web') {
+    localStorage.setItem(STORAGE_KEY, json);
+    return;
+  }
+  getNativeFile('weight-data.json').write(json);
 }
 
 export async function addEntry(
@@ -87,13 +113,30 @@ export async function updateSettings(
 
 export async function getExportUri(): Promise<string> {
   const data = await loadData();
-  exportFile.write(JSON.stringify(data, null, 2));
-  return exportFile.uri;
+  const json = JSON.stringify(data, null, 2);
+
+  if (Platform.OS === 'web') {
+    const blob = new Blob([json], { type: 'application/json' });
+    return URL.createObjectURL(blob);
+  }
+
+  const file = getNativeCacheFile('weight-data-export.json');
+  file.write(json);
+  return file.uri;
 }
 
 export async function importFromUri(fileUri: string): Promise<AppData> {
-  const importFile = new File(fileUri);
-  const json = await importFile.text();
+  let json: string;
+
+  if (Platform.OS === 'web') {
+    const response = await fetch(fileUri);
+    json = await response.text();
+  } else {
+    const { File } = require('expo-file-system') as typeof import('expo-file-system');
+    const importFile = new File(fileUri);
+    json = await importFile.text();
+  }
+
   const imported = JSON.parse(json) as AppData;
   if (!Array.isArray(imported.entries) || !imported.settings) {
     throw new Error('Invalid data format');
