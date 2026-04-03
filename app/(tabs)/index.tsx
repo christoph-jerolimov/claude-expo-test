@@ -1,98 +1,170 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
+import { View, ScrollView, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { WeightInput } from '@/components/weight-input';
+import { WeightChart } from '@/components/weight-chart';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useData } from '@/context/data-context';
+import { useThemeColor } from '@/hooks/use-theme-color';
+import { Fonts } from '@/constants/theme';
 
-export default function HomeScreen() {
+function formatDate(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function getTodayString(): string {
+  return new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
+export default function TrackScreen() {
+  const { data, loading, addEntry, deleteEntry } = useData();
+  const iconColor = useThemeColor({}, 'icon');
+  const tint = useThemeColor({}, 'tint');
+
+  if (loading || !data) {
+    return (
+      <ThemedView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={tint} />
+      </ThemedView>
+    );
+  }
+
+  const { entries, settings } = data;
+  const lastWeight =
+    entries.length > 0
+      ? entries[entries.length - 1].weight
+      : settings.unit === 'kg'
+        ? 70
+        : 150;
+
+  const recentEntries = [...entries].reverse().slice(0, 7);
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <ThemedView style={styles.flex}>
+      <SafeAreaView style={styles.flex} edges={['top']}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled">
+          <View style={styles.header}>
+            <ThemedText style={[styles.title, { fontFamily: Fonts?.rounded }]}>
+              Track
+            </ThemedText>
+            <ThemedText style={[styles.date, { color: iconColor }]}>
+              {getTodayString()}
+            </ThemedText>
+          </View>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+          <WeightInput
+            initialValue={lastWeight}
+            unit={settings.unit}
+            onSave={addEntry}
+          />
+
+          <View style={styles.section}>
+            <ThemedText style={styles.sectionTitle}>History</ThemedText>
+            <WeightChart entries={entries} unit={settings.unit} />
+          </View>
+
+          {recentEntries.length > 0 && (
+            <View style={styles.section}>
+              <ThemedText style={styles.sectionTitle}>Recent</ThemedText>
+              <View style={styles.entriesList}>
+                {recentEntries.map((entry) => (
+                  <View
+                    key={entry.date}
+                    style={[styles.entryRow, { borderBottomColor: iconColor + '20' }]}>
+                    <ThemedText style={styles.entryDate}>
+                      {formatDate(entry.date)}
+                    </ThemedText>
+                    <View style={styles.entryRight}>
+                      <ThemedText style={styles.entryWeight}>
+                        {entry.weight.toFixed(1)} {settings.unit}
+                      </ThemedText>
+                      <Pressable
+                        onPress={() => deleteEntry(entry.date)}
+                        hitSlop={12}>
+                        <IconSymbol
+                          name="trash"
+                          size={18}
+                          color={iconColor + '60'}
+                        />
+                      </Pressable>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      </SafeAreaView>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  flex: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+  },
+  header: {
+    paddingTop: 8,
+    gap: 2,
+  },
+  title: {
+    fontSize: 34,
+    fontWeight: '700',
+  },
+  date: {
+    fontSize: 15,
+  },
+  section: {
+    marginTop: 28,
+    gap: 12,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  entriesList: {
+    gap: 0,
+  },
+  entryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  entryDate: {
+    fontSize: 15,
+  },
+  entryRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 14,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  entryWeight: {
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

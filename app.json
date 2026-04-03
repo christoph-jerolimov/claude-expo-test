@@ -9,7 +9,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSHealthShareUsageDescription": "This app reads your weight data from Apple Health.",
+        "NSHealthUpdateUsageDescription": "This app writes your weight entries to Apple Health."
+      }
     },
     "android": {
       "adaptiveIcon": {
