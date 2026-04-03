@@ -5,23 +5,44 @@ import {
   Pressable,
   StyleSheet,
   Keyboard,
+  Platform,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Fonts } from '@/constants/theme';
 
+function toDateString(d: Date): string {
+  return d.toISOString().split('T')[0];
+}
+
+function formatDisplayDate(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  const today = toDateString(new Date());
+  const yesterday = toDateString(new Date(Date.now() - 86400000));
+  if (dateStr === today) return 'Today';
+  if (dateStr === yesterday) return 'Yesterday';
+  return d.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 interface WeightInputProps {
   initialValue: number;
   unit: 'kg' | 'lbs';
-  onSave: (weight: number) => void;
+  onSave: (weight: number, date: string) => void;
 }
 
 export function WeightInput({ initialValue, unit, onSave }: WeightInputProps) {
   const [weight, setWeight] = useState(initialValue);
+  const [date, setDate] = useState(toDateString(new Date()));
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState('');
+  const [editingDate, setEditingDate] = useState(false);
   const inputRef = useRef<TextInput>(null);
+  const dateInputRef = useRef<TextInput>(null);
 
   const tint = useThemeColor({}, 'tint');
   const bg = useThemeColor({}, 'background');
@@ -48,13 +69,67 @@ export function WeightInput({ initialValue, unit, onSave }: WeightInputProps) {
     Keyboard.dismiss();
   };
 
+  const adjustDate = (days: number) => {
+    const d = new Date(date + 'T00:00:00');
+    d.setDate(d.getDate() + days);
+    setDate(toDateString(d));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const startEditingDate = () => {
+    setEditingDate(true);
+    setTimeout(() => dateInputRef.current?.focus(), 50);
+  };
+
+  const finishEditingDate = () => {
+    setEditingDate(false);
+    Keyboard.dismiss();
+  };
+
+  const handleDateChange = (text: string) => {
+    // Validate YYYY-MM-DD format
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+      const parsed = new Date(text + 'T00:00:00');
+      if (!isNaN(parsed.getTime())) {
+        setDate(text);
+      }
+    }
+  };
+
   const handleSave = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    onSave(weight);
+    onSave(weight, date);
   };
 
   return (
     <View style={styles.container}>
+      <View style={styles.dateRow}>
+        <Pressable onPress={() => adjustDate(-1)} hitSlop={8}>
+          <ThemedText style={[styles.dateArrow, { color: tint }]}>{'‹'}</ThemedText>
+        </Pressable>
+        {editingDate ? (
+          <TextInput
+            ref={dateInputRef}
+            style={[styles.dateLabel, { color: textColor }]}
+            defaultValue={date}
+            onBlur={finishEditingDate}
+            onSubmitEditing={(e) => {
+              handleDateChange(e.nativeEvent.text);
+              finishEditingDate();
+            }}
+            keyboardType={Platform.OS === 'web' ? 'default' : 'numbers-and-punctuation'}
+            selectTextOnFocus
+          />
+        ) : (
+          <Pressable onPress={startEditingDate}>
+            <ThemedText style={styles.dateLabel}>{formatDisplayDate(date)}</ThemedText>
+          </Pressable>
+        )}
+        <Pressable onPress={() => adjustDate(1)} hitSlop={8}>
+          <ThemedText style={[styles.dateArrow, { color: tint }]}>{'›'}</ThemedText>
+        </Pressable>
+      </View>
+
       <Pressable onPress={startEditing} style={styles.displayRow}>
         {editing ? (
           <TextInput
@@ -109,6 +184,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
     gap: 16,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  dateLabel: {
+    fontSize: 17,
+    fontWeight: '600',
+    textAlign: 'center',
+    minWidth: 120,
+  },
+  dateArrow: {
+    fontSize: 28,
+    fontWeight: '300',
+    lineHeight: 32,
   },
   displayRow: {
     flexDirection: 'row',

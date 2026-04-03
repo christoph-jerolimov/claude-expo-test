@@ -8,7 +8,7 @@ import { writeWeightToHealthKit } from '@/utils/healthkit';
 interface DataContextType {
   data: storage.AppData | null;
   loading: boolean;
-  addEntry: (weight: number) => Promise<void>;
+  addEntry: (weight: number, date?: string) => Promise<void>;
   deleteEntry: (date: string) => Promise<void>;
   updateSettings: (settings: Partial<storage.AppSettings>) => Promise<void>;
   exportData: () => Promise<void>;
@@ -34,16 +34,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const addEntry = useCallback(async (weight: number) => {
+  const addEntry = useCallback(async (weight: number, date?: string) => {
+    const entryDate = date ?? new Date().toISOString().split('T')[0];
     setData((prev) => {
       if (!prev) return prev;
-      const today = new Date().toISOString().split('T')[0];
       const entry: storage.WeightEntry = {
-        date: today,
+        date: entryDate,
         weight,
         timestamp: new Date().toISOString(),
       };
-      const filtered = prev.entries.filter((e) => e.date !== today);
+      const filtered = prev.entries.filter((e) => e.date !== entryDate);
       const entries = [...filtered, entry].sort(
         (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
       );
@@ -52,7 +52,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       // Write to HealthKit if enabled
       if (prev.settings.healthKitEnabled) {
-        writeWeightToHealthKit(weight, prev.settings.unit, new Date());
+        writeWeightToHealthKit(weight, prev.settings.unit, new Date(entryDate + 'T00:00:00'));
       }
 
       return updated;
